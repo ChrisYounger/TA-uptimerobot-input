@@ -1,0 +1,144 @@
+<form theme="dark">
+  <label>UptimeRobot Example Dashboard</label>
+  <description>The searches on this dashboard should be changed if the data is going into a custom index</description>
+  <fieldset submitButton="false">
+    <input type="time" token="time" searchWhenChanged="true">
+      <label></label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <table>
+        <title>Summary</title>
+        <search>
+          <query>sourcetype=uptimerobot friendly_name=* 
+| eval status_nice = case(status==0,"Paused",status==1,"Not checked yet",status==2,"Up",status==8,"Seems down",status==9,"Down",true(),null())
+| eval availability = case(status==2,100,status==8 OR status==9,0,true(),null())
+| stats latest(friendly_name) as Name latest(status_nice) as "Current Status"
+count as Events avg(response_time) as "Avg. Response Time" sparkline(avg(response_time)) as "Response Time Over Time" avg(availability) as "Availability" sparkline(avg(availability)) as "Availability Over Time" count(eval(type==1)) as Outages by source | rename source as Monitor</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">row</option>
+        <option name="percentagesRow">false</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+        <format type="number" field="Avg. Response Time">
+          <option name="precision">0</option>
+          <option name="unit">ms</option>
+        </format>
+        <format type="color" field="Current Status">
+          <colorPalette type="map">{"Up":#53A051,"Down":#DC4E41,"Seems down":#DC4E41}</colorPalette>
+        </format>
+        <format type="number" field="Availability">
+          <option name="precision">0</option>
+          <option name="unit">%</option>
+        </format>
+        <format field="Response Time Over Time" type="sparkline">
+          <option name="lineColor">#CCDDFF</option>
+          <option name="fillColor">#5379af</option>
+          <option name="lineWidth">2</option>
+          <option name="height">20</option>
+          <option name="chartRangeMin">0</option>
+          <option name="width">220px</option>
+        </format>
+        <format field="Availability Over Time" type="sparkline">
+          <option name="type">bar</option>
+          <option name="barColor">red</option>
+          <option name="barWidth">4</option>
+          <option name="barSpacing">1</option>
+          <option name="height">25</option>
+          <option name="chartRangeMin">0</option>
+          <option name="chartRangeMax">100</option>
+          <option name="colorMap">
+            <option name="95:">#44a744</option>
+          </option>
+        </format>
+        <drilldown>
+          <set token="monitor_id">$row.Monitor$</set>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row depends="$monitor_id$">
+    <panel>
+      <chart>
+        <title>Avg Response Time Over Time</title>
+        <search>
+          <query>source=$monitor_id$ sourcetype=uptimerobot friendly_name=* response_time=*
+| timechart avg(response_time)</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">ms</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.nullValueMode">connect</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>Availability Over Time</title>
+        <search>
+          <query>source=$monitor_id$ sourcetype=uptimerobot friendly_name=* status=*
+| eval availability = case(status==2,100,status==8 OR status==9,0,true(),null())
+| timechart avg(availability)</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">%</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisY.minimumNumber">0</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.nullValueMode">connect</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <table>
+        <title>Status Change Events</title>
+        <search>
+          <query>sourcetype=uptimerobot type=* source=$monitor_id$
+| eval type = case(type==1,"Down",type==2,"Up",type==99,"Paused",type==98,"Started",true(),type)
+| eval reason = 'reason.detail' + " (" + 'reason.code' + ")" 
+| eval Time = strftime(_time, "%Y-%m-%d %I:%M %p")
+| table Time type reason duration
+| rename type as Type reason as Reason duration as Duration
+| eval Age_days = Age / 86400
+| fieldformat Duration = case(isnull(Duration), "", Duration &lt; 90, tostring(round(Duration, 0)) + " sec", Duration &lt; 600, tostring(round(Duration / 60, 1)) + " min", Duration &lt; 7200, tostring(round(Duration / 60, 0)) + " min", Duration &lt; 86400, tostring(round(Duration / 3600, 0)) + " hrs", Duration &lt; 864000, tostring(round(Duration / 86400, 1)) + " days", true(), tostring(round(Duration / 86400, 0)) + " days")</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+        <format type="color" field="Type">
+          <colorPalette type="map">{"Up":#53A051,"Down":#DC4E41,"Paused":#006D9C,"Started":#708794}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+</form>
